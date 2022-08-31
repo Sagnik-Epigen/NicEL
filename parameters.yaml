@@ -1,0 +1,49 @@
+Distance Thresholding Max Size: 0.3
+Distance Transform Mask Size: 0
+High Blue HSV:
+- 120
+- 255
+- 255
+High Green HSV:
+- 80
+- 255
+- 255
+High Red HSV:
+- 120
+- 255
+- 255
+Hole Closing Iter: 7
+Image Dilation Iter: 3
+Low Blue HSV:
+- 95
+- 0
+- 0
+Low Green HSV:
+- 64
+- 0
+- 0
+Low Red HSV:
+- 95
+- 0
+- 0
+Noise BGR Thresh:
+- 30
+- 30
+- 30
+Optimal K: !!python/object/apply:numpy.core.multiarray.scalar
+- !!python/object/apply:numpy.dtype
+  args:
+  - i8
+  - false
+  - true
+  state: !!python/tuple
+  - 3
+  - <
+  - null
+  - null
+  - null
+  - -1
+  - -1
+  - 0
+- !!binary |
+  BQAAAAAAAAA=
