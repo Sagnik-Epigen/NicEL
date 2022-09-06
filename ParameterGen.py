@@ -19,6 +19,8 @@ import umap
 
 st.set_page_config(layout="wide")
 #Helper Functions
+#path = "/home/devesh/cell-segmentation/control_image_data.xlsx"
+
 def bgr2rgb(img):
     new_img = cv.cvtColor(img,cv.COLOR_BGR2RGB)
     return new_img
@@ -68,12 +70,38 @@ def IoU(img_1,img_2):
     inter_area = np.sum(intersection==255)
     union_area = np.sum(union==255)
     return inter_area/union_area
+   
+def ARI(op_k,A,B):
+    range_k = [x for x in range(A,B+1)]
     
-#def segmentation():
+    if op_k in range_k:
+        range_k.remove(op_k)
+    
+    score_compare = []
+    for k in range_k:
+        kmeans = KMeans(n_clusters=k).fit(intensities)
+        labels_k = kmeans.labels_
+        score_compare.append(ari(labels,labels_k))
+    
+    ari_df = pd.DataFrame({"ARI Score":score_compare},index=range_k)
+    st.write(ari_df)
+    fig = plt.figure()
+    #sns.lineplot(x=ari_df.index, y="ARI Score", data=ari_df)
+    plt.plot(ari_df.index,ari_df["ARI Score"],linestyle='-', marker='o')
+    sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
+    img_size.pyplot(fig)
+    plt.close(fig)
+    #path = "/home/devesh/cell-segmentation/control_image_data.xlsx"
+    
+    #with ExcelWriter(path) as writer:
+    #    name="ARI"+str(op_k)+"Scores"
+    #    ari_df.to_excel(writer,sheet_name="ARI"+op_k+"Scores")
+        
+    
 
 st.title("Control Image Parameter Generator")
 
-img_path = "/home/devesh/cell-segmentation/Control.tif"
+img_path = "/home/devesh/cell-segmentation/images/15.tif"
 img = cv.imread(img_path)
 st.text("Raw Image:")
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
@@ -214,6 +242,7 @@ sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 img_size.image(img_res)
 
 watershed_set = set(watershed.flatten())
+st.write(len(watershed_set))
 watershed_set.remove(-1)
 individual_masks = []
 corr_bg = []
@@ -259,6 +288,7 @@ for i in watershed_set:
 cell_info = pd.DataFrame({'corr_bg':corr_bg,'min_intensity_b':min_intensities_b,'min_intensity_g':min_intensities_g,#'min_intensity_r':min_intensities_r,
                           'mean_intensity_b':mean_intensities_b,'mean_intensity_g':mean_intensities_g,#'mean_intensity_r':mean_intensities_r,
                           'max_intensity_b':np.array(max_intensities_b),'max_intensity_g':np.array(max_intensities_g)})#,'max_intensity_r':max_intensities_r })
+cell_info["ratio_bg"] = cell_info["mean_intensity_b"]/cell_info["mean_intensity_g"]
 st.write(cell_info)
 
 propList = ['Area','centroid_local']
@@ -270,15 +300,15 @@ st.text("Region Data:")
 st.write(regions)
 
 intensities = cell_info.iloc[:,3:5]
-st.text("Correlation between mean intensities found in Cell Regions:")
-fig = plt.figure()
-sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
-sns.heatmap(data=intensities.corr(method="pearson"),annot=True)
-img_size.pyplot(fig)
-plt.close(fig)
+#st.text("Correlation between mean intensities found in Cell Regions:")
+#fig = plt.figure()
+#sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
+#sns.heatmap(data=intensities.corr(method="pearson"),annot=True)
+#img_size.pyplot(fig)
+#plt.close(fig)
 pc_intensities = pd.DataFrame(intensities.corr(method="pearson"))
 
-b,g,r = cv.split(img)
+b,g,r = cv.split(clean_img)
 b = b.flatten()
 g = g.flatten()
 r = r.flatten()
@@ -298,64 +328,70 @@ st.text("Optimal K calculations")
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 with img_size:
     st_yellowbrick(visualizer)
+    
+non_zero_b = b[np.where(b!=0)]
+non_zero_g = g[np.where(g!=0)]
+#non_zero_r = r[np.where(r!=0)]
 
+mean_b = np.mean(non_zero_b)
+mean_g = np.mean(non_zero_g)
 optimal_k_val = visualizer.elbow_value_
-#optimal_k_val = 5
+#optimal_k_val = 8
 kmeans = KMeans(n_clusters=optimal_k_val).fit(intensities)
 centroids = kmeans.cluster_centers_
 labels = kmeans.labels_
+centroids = pd.DataFrame(centroids)
+centroids['normalised_b'] = centroids[centroids.columns[0]].to_numpy()/mean_b
+centroids['normalised_g'] = centroids[centroids.columns[1]].to_numpy()/mean_g
 st.text("The Centroids:")
 st.write(centroids)
-centroids = pd.DataFrame(centroids)
 df = cell_info.copy(deep=True)
 df['cluster_labels'] = labels
 st.text("Cluster Standard Deviation and Count:")
 st.write(df.groupby('cluster_labels').agg({"mean_intensity_b":["std"],"mean_intensity_g":["std"],"cluster_labels":["count"]}))
+cluster_meta = df.groupby('cluster_labels').agg({"mean_intensity_b":["std"],"mean_intensity_g":["std"],"cluster_labels":["count"]})
 
-k_checkers = [x for x in range(2,16)]
-if optimal_k_val in k_checkers:
-    k_checkers.remove(optimal_k_val)
-
-score_compare = []
-for k in k_checkers:
-    kmeans = KMeans(n_clusters=k).fit(intensities)
-    labels_k = kmeans.labels_
-    score_compare.append(ari(labels,labels_k))
-    
-ari_df = pd.DataFrame({"ARI Score":score_compare},index=k_checkers)
-st.write(ari_df)
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 fig = plt.figure()
-#sns.lineplot(x=ari_df.index, y="ARI Score", data=ari_df)
-plt.plot(ari_df.index,ari_df["ARI Score"],linestyle='-', marker='o')
+sns.boxplot(x="cluster_labels",y="mean_intensity_b",data=df)
+#sns.boxplot(x="cluster_labels",y="mean_intensity_g",data=df)
 img_size.pyplot(fig)
 plt.close(fig)
+
+k_checkers = [x for x in range(2,16)]
+distortion_score = []
+for k in k_checkers:
+    kmeans = KMeans(n_clusters=k).fit(intensities)
+    distortion_score.append(kmeans.inertia_)
+    
+distortion_df = pd.DataFrame({"Distortion Score":distortion_score},index=k_checkers)
+st.write(distortion_df)
+fig = plt.figure()
+sns.barplot(data=distortion_df.reset_index(),x="index",y="Distortion Score")
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
+img_size.pyplot(fig)
+plt.close(fig)
+
+ARI(2,2,15)
+ARI(optimal_k_val,2,15)
+ARI(15,2,15)
+
 
 #reducer = umap.UMAP()
 #embedding = reducer.fit_transform(cell_info.iloc[:,3:5])
 #st.write(embedding.shape)
-#fig = plt.figure()
-#for i, col in enumerate(['b', 'g', 'r']):
-#    hist = cv.calcHist([img], [i], None, [27], [0, 256])
-#    histoplot = plt.plot(hist, color = col)
-#    plt.xlim([0, 15])
-#    
-#st.write(hist)
-#st.text("Histogram Analysis:")
-#st.pyplot(fig)
 
 fig,ax = plt.subplots()
-sns.kdeplot(data=tot_img["blue"],color="blue")
-sns.kdeplot(data=tot_img["green"],color="green")
-sns.kdeplot(data=tot_img["red"],color="red")
+sns.kdeplot(data=tot_img["blue"],color="blue",fill=True)
+sns.kdeplot(data=tot_img["green"],color="green",fill=True)
+sns.kdeplot(data=tot_img["red"],color="red",fill=True)
 ax.set_xlim(-10,30)
 st.text("Histogram Analysis")
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 img_size.pyplot(fig)
 plt.close(fig)
 
-
-path = "/home/devesh/cell-segmentation/control_image_data.xlsx"
+path = "/home/devesh/cell-segmentation/Romidepsin.xlsx"
 with ExcelWriter(path) as writer:
     cell_info.to_excel(writer,sheet_name="Cell Information")
     regions.to_excel(writer, sheet_name='Cell Region Data')
@@ -363,9 +399,11 @@ with ExcelWriter(path) as writer:
     pc_intensities.to_excel(writer,sheet_name='Cell Intensity Correlation') 
     pc_raw.to_excel(writer,sheet_name="Channel Intensity Correlation")
     IoUs.to_excel(writer,sheet_name="IoUs between different Channels")
+    cluster_meta.to_excel(writer,sheet_name="Cluster Meta Information")
+    distortion_df.to_excel(writer,sheet_name="Distortion Scores")
 #writer.save()
-
-parametric_data = {"Optimal K":optimal_k_val,"Distance Thresholding Max Size":max_size,"Distance Transform Mask Size":mask_size,"Hole Closing Iter":h_iterations,"Image Dilation Iter":d_iterations,"Low Green HSV":low_green.tolist(),"High Green HSV":high_green.tolist(),"Low Blue HSV":low_blue.tolist(),"High Blue HSV":high_blue.tolist(),"Low Red HSV":low_red.tolist(),"High Red HSV":high_red.tolist(),"Noise BGR Thresh":[b_thres,g_thres,r_thres]}
+#st.write(optimal_k_val)
+parametric_data = {"Optimal K":int(optimal_k_val),"Distance Thresholding Max Size":max_size,"Distance Transform Mask Size":mask_size,"Hole Closing Iter":h_iterations,"Image Dilation Iter":d_iterations,"Low Green HSV":low_green.tolist(),"High Green HSV":high_green.tolist(),"Low Blue HSV":low_blue.tolist(),"High Blue HSV":high_blue.tolist(),"Low Red HSV":low_red.tolist(),"High Red HSV":high_red.tolist(),"Noise BGR Thresh":[b_thres,g_thres,r_thres]}
 
 with open("/home/devesh/cell-segmentation/parameters.yaml", mode="wb") as file:
     yaml.dump(parametric_data, file,encoding="utf-8")

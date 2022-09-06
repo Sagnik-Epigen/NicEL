@@ -4,6 +4,8 @@ import cv2 as cv
 import os
 from matplotlib import pyplot as plt
 from yellowbrick.cluster import KElbowVisualizer
+from sklearn.metrics.cluster import adjusted_rand_score as ari
+
 import seaborn as sns
 import skimage
 from skimage import measure, color, io
@@ -71,7 +73,7 @@ st.title("Test Image")
 with open('parameters.yaml', 'r') as file:
     parameters = yaml.safe_load(file)
     
-img_path = "/home/devesh/cell-segmentation/images/15.tif"
+img_path = "/home/devesh/cell-segmentation/images/34.tif"
 img = cv.imread(img_path)
 st.text("Raw Image:")
 sideL,img_size,sideR = st.columns([0.2, 3, 0.2])
@@ -167,31 +169,29 @@ _,sure_fg = cv.threshold(dist,max_size*dist.max(),255,0)
 st.text("Sure Foreground:")
 sideL,img_size,sideR = st.columns([0.2, 3, 0.2])
 img_size.image(cv.convertScaleAbs(sure_fg))
-
-propList = ['Area',
-            'intensity_mean',
-            'intensity_max',
-            'intensity_min',
-            'centroid_local']
-
 sure_fg = cv.convertScaleAbs(sure_fg)
+
 etc,markers = cv.connectedComponents(sure_fg)
 markers = markers+10
 watershed = cv.watershed(img,markers)
 img[markers == -1] = [0,255,255]
 img_res = color.label2rgb(markers, bg_label=0)
-sideL,img_size,sideR = st.columns([0.2, 3, 0.2])
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 img_size.image(img_res)
-regions = measure.regionprops_table(markers, intensity_image=img,properties=propList)
-regions = pd.DataFrame(regions)
-#regions = regions.drop(columns=["intensity_mean-2","intensity_max-2","intensity_min-2"])
-st.text("Cell Data:")
-st.write(regions)
 
 watershed_set = set(watershed.flatten())
 watershed_set.remove(-1)
 individual_masks = []
 corr_bg = []
+min_intensities_b = []
+mean_intensities_b = []
+max_intensities_b = []
+min_intensities_g = []
+mean_intensities_g = []
+max_intensities_g = []
+min_intensities_r = []
+mean_intensities_r = []
+max_intensities_r = []
 for i in watershed_set:
     bool_mask = (watershed == i)
     int_mask = bool_mask.astype(np.uint8)
@@ -201,24 +201,50 @@ for i in watershed_set:
     onlyCellb,onlyCellg,onlyCellr = cv.split(onlyCell) 
     b = onlyCellb.flatten()
     g = onlyCellg.flatten()
-    r = onlyCellr.flatten()
-    onlyCell = pd.DataFrame({'blue':b,'green':g,'red':r})
+    #r = onlyCellr.flatten()
+    non_zero_b = b[np.where(b!=0)]
+    non_zero_g = g[np.where(g!=0)]
+    
+    #non_zero_r = r[np.where(r!=0)]
+    min_intensities_b.append(np.amin(non_zero_b))
+    min_intensities_g.append(np.amin(non_zero_g))
+    #min_intensities_r.append(np.amin(non_zero_r))
+    
+    mean_intensities_b.append(np.mean(non_zero_b))
+    mean_intensities_g.append(np.mean(non_zero_g))
+    #mean_intensities_r.append(np.mean(non_zero_r))
+    
+    max_intensities_b.append(max(non_zero_b))
+    max_intensities_g.append(max(non_zero_g))
+    #max_intensities_r.append(max(non_zero_r))
+    
+    onlyCell = pd.DataFrame({'blue':b,'green':g})#,'red':r})
     corr = onlyCell.corr(method='pearson')
     corr_bg.append(corr['blue']['green'])
-    
-overlap_coeff = pd.DataFrame({'cell_bg':corr_bg})
-st.write(overlap_coeff)
 
-intensities = regions.iloc[:,1:4]
-st.text("Correlation between intensities found in Cell Regions:")
+cell_info = pd.DataFrame({'corr_bg':corr_bg,'min_intensity_b':min_intensities_b,'min_intensity_g':min_intensities_g,#'min_intensity_r':min_intensities_r,
+                          'mean_intensity_b':mean_intensities_b,'mean_intensity_g':mean_intensities_g,#'mean_intensity_r':mean_intensities_r,
+                          'max_intensity_b':np.array(max_intensities_b),'max_intensity_g':np.array(max_intensities_g)})#,'max_intensity_r':max_intensities_r })
+st.write(cell_info)
+
+propList = ['Area','centroid_local']
+regions = measure.regionprops_table(markers,intensity_image=clean_img,properties=propList)
+regions = pd.DataFrame(regions)
+#regions = regions.drop(columns=["intensity_mean-2","intensity_max-2","intensity_min-2"])
+
+st.text("Region Data:")
+st.write(regions)
+
+intensities = cell_info.iloc[:,3:5]
+st.text("Correlation between mean intensities found in Cell Regions:")
 fig = plt.figure()
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 sns.heatmap(data=intensities.corr(method="pearson"),annot=True)
-sideL,img_size,sideR = st.columns([0.2, 3, 0.2])
 img_size.pyplot(fig)
 plt.close(fig)
 pc_intensities = pd.DataFrame(intensities.corr(method="pearson"))
 
-b,g,r = cv.split(clean_img)
+b,g,r = cv.split(img)
 b = b.flatten()
 g = g.flatten()
 r = r.flatten()
@@ -226,7 +252,7 @@ tot_img = pd.DataFrame({'blue':b,'green':g,'red':r})
 st.text("Correlation between color channels of the original image:")
 fig = plt.figure()
 sns.heatmap(data=tot_img.corr(method="pearson"),annot=True)
-sideL,img_size,sideR = st.columns([0.2, 3, 0.2])
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 img_size.pyplot(fig)
 plt.close(fig)
 pc_raw = pd.DataFrame(tot_img.corr(method="pearson"))
@@ -234,9 +260,41 @@ pc_raw = pd.DataFrame(tot_img.corr(method="pearson"))
 optimal_k_val = parameters["Optimal K"]
 kmeans = KMeans(n_clusters=optimal_k_val).fit(intensities)
 centroids = kmeans.cluster_centers_
+labels = kmeans.labels_
 st.text("The Centroids:")
 st.write(centroids)
 centroids = pd.DataFrame(centroids)
+df = cell_info.copy(deep=True)
+df['cluster_labels'] = labels
+st.text("Cluster Standard Deviation and Count:")
+st.write(df.groupby('cluster_labels').agg({"mean_intensity_b":["std"],"mean_intensity_g":["std"],"cluster_labels":["count"]}))
+cluster_meta = df.groupby('cluster_labels').agg({"mean_intensity_b":["std"],"mean_intensity_g":["std"],"cluster_labels":["count"]})
+
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
+fig = plt.figure()
+sns.boxplot(x="cluster_labels",y="mean_intensity_b",data=df)
+#sns.boxplot(x="cluster_labels",y="mean_intensity_g",data=df)
+img_size.pyplot(fig)
+plt.close(fig)
+
+k_checkers = [x for x in range(2,16)]
+if optimal_k_val in k_checkers:
+    k_checkers.remove(optimal_k_val)
+
+score_compare = []
+for k in k_checkers:
+    kmeans = KMeans(n_clusters=k).fit(intensities)
+    labels_k = kmeans.labels_
+    score_compare.append(ari(labels,labels_k))
+    
+ari_df = pd.DataFrame({"ARI Score":score_compare},index=k_checkers)
+st.write(ari_df)
+fig = plt.figure()
+#sns.lineplot(x=ari_df.index, y="ARI Score", data=ari_df)
+plt.plot(ari_df.index,ari_df["ARI Score"],linestyle='-', marker='o')
+sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
+img_size.pyplot(fig)
+plt.close(fig)
 
 fig,ax = plt.subplots()
 sns.kdeplot(data=tot_img["blue"],color="blue",fill=True)
@@ -250,10 +308,12 @@ plt.close(fig)
 
 path = "/home/devesh/cell-segmentation/test_image_data.xlsx"
 with ExcelWriter(path) as writer:
-    regions.to_excel(writer, sheet_name='Cell Data')
+    cell_info.to_excel(writer,sheet_name="Cell Information")
+    regions.to_excel(writer, sheet_name='Cell Region Data')
     centroids.to_excel(writer, sheet_name='Centroid Data')
     pc_intensities.to_excel(writer,sheet_name='Cell Intensity Correlation') 
     pc_raw.to_excel(writer,sheet_name="Channel Intensity Correlation")
     IoUs.to_excel(writer,sheet_name="IoUs between different Channels")
-    overlap_coeff.to_excel(writer,sheet_name="Overlap Coefficient")
+    ari_df.to_excel(writer,sheet_name="ARI Scores")
+    cluster_meta.to_excel(writer,sheet_name="Cluster Meta Information")
 #writer.save()
