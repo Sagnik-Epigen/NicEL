@@ -101,7 +101,7 @@ def ARI(op_k,A,B):
 
 st.title("Control Image Parameter Generator")
 
-img_path = "/home/devesh/cell-segmentation/images/15.tif"
+img_path = "/home/devesh/cell-segmentation/HT1080.png"
 img = cv.imread(img_path)
 st.text("Raw Image:")
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
@@ -122,8 +122,8 @@ tab1,tab2,tab3 = st.tabs(["Blue","Green","Red"])
 img_hsv = bgr2hsv(clean_img)
 
 with tab1:
-    blue_low_h = int(st.slider("Blue Low Hue",min_value=0,max_value=360,value=190)/2)
-    blue_high_h = int(st.slider("Blue High Hue",min_value=0,max_value=360,value=240)/2)
+    blue_low_h = int(st.slider("Blue Low Hue",min_value=0,max_value=360,value=200)/2)
+    blue_high_h = int(st.slider("Blue High Hue",min_value=0,max_value=360,value=260)/2)
     blue_low_s = int(st.slider("Blue Low Saturation",min_value=0,max_value=100,value=0)/100*255)
     blue_high_s = int(st.slider("Blue High Saturation",min_value=0,max_value=100,value=100)/100*255)
     blue_low_v = int(st.slider("Blue Low Value",min_value=0,max_value=100,value=0)/100*255)
@@ -152,8 +152,8 @@ with tab2:
     cv.imwrite("/home/devesh/cell-segmentation/Control_Image_Data/green-hsv.png",green_mask)
     
 with tab3:
-    red_low_h = int(st.slider("Red Low Hue",min_value=0,max_value=360,value=190)/2)
-    red_high_h = int(st.slider("Red High Hue",min_value=0,max_value=360,value=240)/2)
+    red_low_h = int(st.slider("Red Low Hue",min_value=0,max_value=360,value=280)/2)
+    red_high_h = int(st.slider("Red High Hue",min_value=0,max_value=360,value=330)/2)
     red_low_s = int(st.slider("Red Low Saturation",min_value=0,max_value=100,value=0)/100*255)
     red_high_s = int(st.slider("Red High Saturation",min_value=0,max_value=100,value=100)/100*255)
     red_low_v = int(st.slider("Red Low Value",min_value=0,max_value=100,value=0)/100*255)
@@ -166,7 +166,7 @@ with tab3:
     img_size.image(red_mask,use_column_width=True)
     cv.imwrite("/home/devesh/cell-segmentation/Control_Image_Data/red-hsv.png",red_mask)
 
-full_mask = cv.bitwise_or(green_mask,blue_mask,red_mask)
+full_mask = cv.bitwise_or(blue_mask,red_mask)
 #st.image(red_mask)
 st.text("Full Mask:")
 sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
@@ -242,10 +242,11 @@ sideL,img_size,sideR = st.columns([0.2, 1, 0.2])
 img_size.image(img_res)
 
 watershed_set = set(watershed.flatten())
-st.write(len(watershed_set))
+#st.write(len(watershed_set))
 watershed_set.remove(-1)
 individual_masks = []
 corr_bg = []
+corr_br = []
 min_intensities_b = []
 mean_intensities_b = []
 max_intensities_b = []
@@ -255,6 +256,7 @@ max_intensities_g = []
 min_intensities_r = []
 mean_intensities_r = []
 max_intensities_r = []
+st.write(watershed_set)
 for i in watershed_set:
     bool_mask = (watershed == i)
     int_mask = bool_mask.astype(np.uint8)
@@ -263,32 +265,35 @@ for i in watershed_set:
     onlyCell = cv.bitwise_and(clean_img,clean_img,mask=int_mask)
     onlyCellb,onlyCellg,onlyCellr = cv.split(onlyCell) 
     b = onlyCellb.flatten()
-    g = onlyCellg.flatten()
-    #r = onlyCellr.flatten()
+    #g = onlyCellg.flatten()
+    r = onlyCellr.flatten()
     non_zero_b = b[np.where(b!=0)]
-    non_zero_g = g[np.where(g!=0)]
+    #non_zero_g = g[np.where(g!=0)]
+    non_zero_r = r[np.where(r!=0)]
     
-    #non_zero_r = r[np.where(r!=0)]
     min_intensities_b.append(np.amin(non_zero_b))
-    min_intensities_g.append(np.amin(non_zero_g))
-    #min_intensities_r.append(np.amin(non_zero_r))
+    #min_intensities_g.append(np.amin(non_zero_g))
+    min_intensities_r.append(np.amin(non_zero_r))
     
     mean_intensities_b.append(np.mean(non_zero_b))
-    mean_intensities_g.append(np.mean(non_zero_g))
-    #mean_intensities_r.append(np.mean(non_zero_r))
+    #mean_intensities_g.append(np.mean(non_zero_g))
+    mean_intensities_r.append(np.mean(non_zero_r))
     
     max_intensities_b.append(max(non_zero_b))
-    max_intensities_g.append(max(non_zero_g))
-    #max_intensities_r.append(max(non_zero_r))
+    #max_intensities_g.append(max(non_zero_g))
+    max_intensities_r.append(max(non_zero_r))
     
-    onlyCell = pd.DataFrame({'blue':b,'green':g})#,'red':r})
+    onlyCell = pd.DataFrame({'blue':b,'red':r})#,'red':r})
     corr = onlyCell.corr(method='pearson')
-    corr_bg.append(corr['blue']['green'])
+    corr_br.append(corr['blue']['red'])
 
-cell_info = pd.DataFrame({'corr_bg':corr_bg,'min_intensity_b':min_intensities_b,'min_intensity_g':min_intensities_g,#'min_intensity_r':min_intensities_r,
-                          'mean_intensity_b':mean_intensities_b,'mean_intensity_g':mean_intensities_g,#'mean_intensity_r':mean_intensities_r,
-                          'max_intensity_b':np.array(max_intensities_b),'max_intensity_g':np.array(max_intensities_g)})#,'max_intensity_r':max_intensities_r })
-cell_info["ratio_bg"] = cell_info["mean_intensity_b"]/cell_info["mean_intensity_g"]
+cell_info = pd.DataFrame({'corr_br':corr_br,'min_intensity_b':min_intensities_b,#'min_intensity_g':min_intensities_g,
+                          'min_intensity_r':min_intensities_r,
+                          'mean_intensity_b':mean_intensities_b,#'mean_intensity_g':mean_intensities_g,
+                          'mean_intensity_r':mean_intensities_r,
+                          'max_intensity_b':np.array(max_intensities_b),#'max_intensity_g':np.array(max_intensities_g)})#,
+                          'max_intensity_r':max_intensities_r })
+cell_info["ratio_br"] = cell_info["mean_intensity_b"]/cell_info["mean_intensity_r"]
 st.write(cell_info)
 
 propList = ['Area','centroid_local']
