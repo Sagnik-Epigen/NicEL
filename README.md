@@ -1,8 +1,8 @@
-# Cell Segmentation Analysis Tool
+# NicE-view Analysis Tool
 
 ## Description
 
-This project provides tools for analyzing and segmenting cell images using image processing techniques and machine learning. It includes Streamlit applications for generating optimal processing parameters from a control image and testing these parameters on other images. The core methods involve noise reduction, HSV color masking, morphological operations (dilation, closing), watershed segmentation, and K-Means clustering to analyze cell properties. An experimental notebook exploring the StarDist library for segmentation is also included.
+This project provides tools for analyzing and segmenting cell images using image processing techniques and Deep Learning. It includes Streamlit applications for generating optimal processing parameters from a control image and testing these parameters on other images. The core methods involve noise reduction, HSV color masking, morphological operations (dilation, closing), watershed segmentation, and K-Means clustering to analyze cell properties. An experimental notebook exploring the StarDist library for segmentation is also included.
 
 ## Features
 
